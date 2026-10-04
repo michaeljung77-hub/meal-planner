@@ -29,7 +29,7 @@ async def _with_client(fn):
         raise SkylightError(f"Skylight problem: {name}: {e}") from e
 
 
-async def _find_target(sky):
+async def _frame(sky):
     frame_id = config.SKYLIGHT_FRAME_ID or db.get_setting("skylight_frame_id")
     frame_name = db.get_setting("skylight_frame_name", "")
     if not frame_id:
@@ -40,6 +40,11 @@ async def _find_target(sky):
         frame_id, frame_name = str(best.id), best.name or best.household_name or ""
         db.set_setting("skylight_frame_id", frame_id)
         db.set_setting("skylight_frame_name", frame_name)
+    return frame_id, frame_name
+
+
+async def _find_target(sky):
+    frame_id, frame_name = await _frame(sky)
     lists = await sky.get_lists(frame_id)
     want = config.SKYLIGHT_LIST_NAME.lower()
     target = (next((l for l in lists if (l.label or "").strip().lower() == want), None)
@@ -71,3 +76,39 @@ def push_items(labels: list[str]) -> dict:
             added += 1
         return {"added": added, "already_there": skipped, "list": target.label}
     return asyncio.run(_with_client(run))
+
+
+def events_for(day, tz_name: str) -> list[dict]:
+    """Calendar events (including ones typed on the Skylight) that touch the given local date."""
+    from datetime import datetime, time, timedelta
+    from zoneinfo import ZoneInfo
+
+    tz = ZoneInfo(tz_name)
+    start = datetime.combine(day, time.min, tz)
+    end = start + timedelta(days=1)
+
+    async def run(sky):
+        frame_id, _ = await _frame(sky)
+        return await sky.get_calendar_events(frame_id, (day - timedelta(days=1)).isoformat(),
+                                             (day + timedelta(days=1)).isoformat(), timezone=tz_name)
+
+    out, seen = [], set()
+    for e in asyncio.run(_with_client(run)):
+        if not e.starts_at:
+            continue
+        s = e.starts_at.astimezone(tz)
+        en = (e.ends_at or e.starts_at).astimezone(tz)
+        if e.all_day:
+            # all-day events end at midnight of the following day
+            if not (s.date() <= day < max(en.date(), s.date() + timedelta(days=1))):
+                continue
+        elif not (s < end and en > start) and not (s >= start and s < end):
+            continue
+        key = (e.summary, s.isoformat(), bool(e.all_day))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"title": (e.summary or "Untitled").strip(), "all_day": bool(e.all_day),
+                    "start": s, "end": en, "started_before": (not e.all_day) and s < start})
+    out.sort(key=lambda x: (not x["all_day"], x["start"]))
+    return out

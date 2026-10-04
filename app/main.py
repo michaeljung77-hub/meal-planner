@@ -7,10 +7,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import claude_ai, config, db, mailer, mealie, skylight, taste
+from . import claude_ai, config, db, kindle, mailer, mealie, skylight, taste
 
 log = logging.getLogger("planner")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -48,6 +48,12 @@ def manifest():
 @app.get("/apple-touch-icon.png")
 def touch_icon():
     return FileResponse(STATIC / "apple-touch-icon.png")
+
+
+@app.get("/kindle.png")
+def kindle_png(day: str = "auto"):
+    """Bedroom e-ink dashboard. day=auto|today|tomorrow."""
+    return Response(kindle.render(day), media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
 # ------------------------------------------------------------------ helpers
