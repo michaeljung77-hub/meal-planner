@@ -1,0 +1,26 @@
+# Paste into CasaOS: App Store > Custom Install > Import.
+# Fill in the values marked CHANGE-ME in the CasaOS form, never in GitHub.
+services:
+  meal-planner:
+    image: ghcr.io/michaeljung77-hub/meal-planner:latest
+    container_name: meal-planner
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      - /DATA/AppData/meal-planner:/data
+    environment:
+      TZ: America/New_York
+      ANTHROPIC_API_KEY: CHANGE-ME
+      MEALIE_URL: http://192.168.4.51:9925
+      MEALIE_TOKEN: CHANGE-ME
+      GMAIL_USER: jungfamily.mealplanner@gmail.com
+      GMAIL_APP_PASSWORD: CHANGE-ME
+      SKYLIGHT_RECIPE_EMAIL: jung_family@ourskylight.com
+      SKYLIGHT_LOGIN_EMAIL: michael.jung77@googlemail.com
+      SKYLIGHT_PASSWORD: CHANGE-ME
+      SKYLIGHT_LIST_NAME: Grocery List
+    deploy:
+      resources:
+        limits:
+          memory: 512M

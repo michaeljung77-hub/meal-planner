@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Meal Planner</title>
+  <meta name="theme-color" content="#f6f1e7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1c1a17" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Meal Planner">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/static/style.css?v=1">
+</head>
+<body>
+  <header class="top">
+    <button class="icon-btn" id="backBtn" aria-label="Home" hidden>&#8592;</button>
+    <h1 id="title">Meal Planner</h1>
+    <div class="steps" id="steps" hidden></div>
+  </header>
+  <main id="view"></main>
+  <footer class="bar" id="bar" hidden></footer>
+  <div class="toast" id="toast" hidden></div>
+  <div class="overlay" id="busy" hidden>
+    <div class="busy-card">
+      <div class="spinner"></div>
+      <p id="busyText">Working...</p>
+      <p class="muted small" id="busySub"></p>
+    </div>
+  </div>
+  <script src="/static/app.js?v=1"></script>
+</body>
+</html>
