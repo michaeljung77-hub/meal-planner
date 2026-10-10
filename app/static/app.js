@@ -510,11 +510,21 @@ function renderDone() {
     </div>
     <div class="card"><h3>Grocery list</h3>
       ${r.grocery ? `<div class="status ${r.grocery.status === "error" ? "err" : "ok"}">${icon(r.grocery.status)} ${esc(r.grocery.detail)}</div>` : ""}
-      ${r.grocery && r.grocery.status === "error" && r.grocery_text ? `<p class="small">Here's the list to copy instead:</p><pre class="copy">${esc(r.grocery_text)}</pre>` : ""}
+      ${r.grocery && r.grocery.status === "error" ? `<button class="primary" id="resend" style="margin:10px 0">Try again: send grocery list</button>` : ""}
+      ${r.grocery && r.grocery.status === "error" && r.grocery_text ? `<p class="small">Or copy the list:</p><pre class="copy">${esc(r.grocery_text)}</pre>` : ""}
     </div>
     <p class="muted small">Next Saturday, the planner will ask how these meals went.</p>`;
   setBar(`<button class="primary big" id="home">Done</button>`);
   $("#home").onclick = () => { S.results = null; go("home"); };
+  const resend = $("#resend");
+  if (resend) resend.onclick = async () => {
+    try {
+      const res = await api("/api/plan/resend-grocery", {}, { busyText: "Sending the grocery list..." });
+      S.results = res.results;
+      renderDone();
+      toast(res.results.grocery.status === "error" ? res.results.grocery.detail : "Grocery list sent", res.results.grocery.status === "error");
+    } catch (e) { toast(e.message, true); }
+  };
 }
 
 // ---------------------------------------------------------------- profile

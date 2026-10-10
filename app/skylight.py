@@ -9,6 +9,17 @@ class SkylightError(Exception):
     pass
 
 
+def _run(coro):
+    """Run async Skylight calls from anywhere, including inside the web server's event loop."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
+
+
 async def _with_client(fn):
     try:
         from pyskylight import PasswordAuth, Skylight
@@ -59,7 +70,7 @@ def test() -> dict:
     async def run(sky):
         frame_id, frame_name, target = await _find_target(sky)
         return {"frame_id": frame_id, "frame_name": frame_name, "list": target.label}
-    return asyncio.run(_with_client(run))
+    return _run(_with_client(run))
 
 
 def push_items(labels: list[str]) -> dict:
@@ -75,7 +86,7 @@ def push_items(labels: list[str]) -> dict:
             await sky.create_list_item(frame_id, target.id, label)
             added += 1
         return {"added": added, "already_there": skipped, "list": target.label}
-    return asyncio.run(_with_client(run))
+    return _run(_with_client(run))
 
 
 def events_for(day, tz_name: str) -> list[dict]:
@@ -93,7 +104,7 @@ def events_for(day, tz_name: str) -> list[dict]:
                                              (day + timedelta(days=1)).isoformat(), timezone=tz_name)
 
     out, seen = [], set()
-    for e in asyncio.run(_with_client(run)):
+    for e in _run(_with_client(run)):
         if not e.starts_at:
             continue
         s = e.starts_at.astimezone(tz)

@@ -437,7 +437,35 @@ def _skylight_body(i: dict, rec: dict) -> str:
 
 @app.post("/api/plan/confirm")
 async def plan_confirm(request: Request):
+    from starlette.concurrency import run_in_threadpool
     body = await request.json()
+    return await run_in_threadpool(_confirm, body)
+
+
+def _push_grocery(labels: list[str]) -> dict:
+    try:
+        if not labels:
+            return {"status": "already", "detail": "Grocery list was empty"}
+        res = skylight.push_items(labels)
+        return {"status": "sent", "detail": f"{res['added']} items added to '{res['list']}'"
+                + (f", {res['already_there']} were already on it" if res["already_there"] else "")}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
+@app.post("/api/plan/resend-grocery")
+def resend_grocery():
+    last = db.row("SELECT * FROM weeks WHERE status='confirmed' ORDER BY id DESC LIMIT 1")
+    if not last:
+        raise ValueError("No sent plan found.")
+    results = json.loads(last["results_json"] or "{}")
+    labels = [l for l in (results.get("grocery_text") or "").split("\n") if l.strip()]
+    results["grocery"] = _push_grocery(labels)
+    db.execute("UPDATE weeks SET results_json=? WHERE id=?", (json.dumps(results), last["id"]))
+    return {"results": results}
+
+
+def _confirm(body: dict):
     w = _require_week()
     aisles = body.get("aisles") or (json.loads(w["grocery_json"]) if w["grocery_json"] else {}).get("aisles", [])
     picked = db.rows("SELECT * FROM ideas WHERE week_id=? AND status='picked' AND prep_status='done'", (w["id"],))
@@ -470,19 +498,11 @@ async def plan_confirm(request: Request):
                 continue
             label = it["item"].strip()
             if it.get("qty"):
-                label += f" ({it['qty']})"
+                label += f" - {it['qty']}"
             if it.get("other_store"):
                 label += " - Publix/Ingles"
             labels.append(label)
-    try:
-        if labels:
-            res = skylight.push_items(labels)
-            results["grocery"] = {"status": "sent", "detail": f"{res['added']} items added to '{res['list']}'"
-                                  + (f", {res['already_there']} were already on it" if res["already_there"] else "")}
-        else:
-            results["grocery"] = {"status": "already", "detail": "Grocery list was empty"}
-    except Exception as e:
-        results["grocery"] = {"status": "error", "detail": str(e)}
+    results["grocery"] = _push_grocery(labels)
     results["grocery_text"] = "\n".join(labels)
 
     db.execute("UPDATE pantry SET low=0")
