@@ -8,6 +8,8 @@ def _get(name: str, default: str = "") -> str:
 
 
 ANTHROPIC_API_KEY = _get("ANTHROPIC_API_KEY")
+# Needed only for keys that work across several Console workspaces (ID starts with wrkspc_)
+ANTHROPIC_WORKSPACE_ID = _get("ANTHROPIC_WORKSPACE_ID")
 CLAUDE_MODEL = _get("CLAUDE_MODEL", "claude-sonnet-5")
 # Server-side web search tool version used to find real recipes online.
 CLAUDE_WEB_SEARCH_TOOL = _get("CLAUDE_WEB_SEARCH_TOOL", "web_search_20250305")

@@ -18,7 +18,9 @@ def client():
         if not config.ANTHROPIC_API_KEY:
             raise AIError("The Claude API key is missing in the settings.")
         import anthropic
-        _client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY, timeout=240, max_retries=2)
+        headers = {"anthropic-workspace-id": config.ANTHROPIC_WORKSPACE_ID} if config.ANTHROPIC_WORKSPACE_ID else None
+        _client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY, timeout=240, max_retries=2,
+                                      default_headers=headers)
     return _client
 
 
@@ -72,6 +74,9 @@ def ask(prompt: str, max_tokens: int = 4000, tools=None):
     except anthropic.AuthenticationError as e:
         raise AIError("The Claude API key was rejected. Check it in the settings.") from e
     except anthropic.APIStatusError as e:
+        if "workspace" in str(e.message).lower():
+            raise AIError("Your Claude API key needs a workspace. Either create a new key inside a workspace in the "
+                          "Claude Console, or add the setting ANTHROPIC_WORKSPACE_ID (starts with wrkspc_) in CasaOS.") from e
         raise AIError(f"Claude API error {e.status_code}: {str(e.message)[:200]}") from e
     except anthropic.APIConnectionError as e:
         raise AIError("Could not reach the Claude API. Is the Beelink online?") from e
