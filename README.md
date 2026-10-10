@@ -29,7 +29,7 @@ are always respected. Favorites rest for a few weeks; "Miss" retires a dish.
 | --- | --- |
 | `ANTHROPIC_API_KEY` | Claude API key |
 | `ANTHROPIC_WORKSPACE_ID` | only if the key works across several Console workspaces (starts with `wrkspc_`) |
-| `CLAUDE_MODEL` | optional, default `claude-sonnet-5` |
+| `CLAUDE_MODEL` | optional, default `claude-sonnet-5-5` |
 | `MEALIE_URL` | e.g. `http://192.168.4.51:9925` |
 | `MEALIE_TOKEN` | Mealie API token |
 | `GMAIL_USER`, `GMAIL_APP_PASSWORD` | sender account for Skylight emails |

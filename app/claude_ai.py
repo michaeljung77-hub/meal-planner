@@ -1,11 +1,13 @@
 """All Claude API calls: ideas, recipes, tweaks, fingerprints, grocery list, taste profile."""
 
 import json
+import logging
 import re
 
 from . import config
 
 _client = None
+log = logging.getLogger("planner.ai")
 
 
 class AIError(Exception):
@@ -35,44 +37,75 @@ def _text(resp) -> str:
     return "".join(getattr(b, "text", "") for b in resp.content if getattr(b, "type", "") == "text")
 
 
+class _Unreadable(Exception):
+    pass
+
+
 def _json(text: str):
-    text = text.strip()
-    text = re.sub(r"^```(?:json)?|```$", "", text, flags=re.M).strip()
-    try:
-        return json.loads(text)
-    except ValueError:
-        pass
+    text = (text or "").strip()
+    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.M).strip()
+    candidates = [text]
     for open_c, close_c in (("{", "}"), ("[", "]")):
         start, end = text.find(open_c), text.rfind(close_c)
         if start != -1 and end > start:
+            candidates.append(text[start:end + 1])
+    for c in candidates:
+        for variant in (c, re.sub(r",\s*([}\]])", r"\1", c)):   # also tolerate trailing commas
             try:
-                return json.loads(text[start:end + 1])
+                # strict=False accepts line breaks inside text values (e.g. the taste profile)
+                return json.loads(variant, strict=False)
             except ValueError:
                 continue
-    raise AIError("Claude's answer could not be read. Please try again.")
+    raise _Unreadable(text)
+
+
+def _create(kwargs):
+    resp = client().messages.create(**kwargs)
+    # Long server-side tool runs (web search) can pause; continue them.
+    for _ in range(3):
+        if getattr(resp, "stop_reason", "") != "pause_turn":
+            break
+        kwargs = dict(kwargs, messages=kwargs["messages"] + [{"role": "assistant", "content": resp.content}])
+        resp = client().messages.create(**kwargs)
+    return resp
 
 
 def ask(prompt: str, max_tokens: int = 4000, tools=None):
+    import anthropic
     try:
-        import anthropic
-        messages = [{"role": "user", "content": prompt}]
         kwargs = {"model": config.CLAUDE_MODEL, "max_tokens": max_tokens, "system": SYSTEM,
-                  "messages": messages}
+                  "messages": [{"role": "user", "content": prompt}]}
         if tools:
             kwargs["tools"] = tools
-        resp = client().messages.create(**kwargs)
-        # Long server-side tool runs (web search) can pause; continue them.
-        for _ in range(3):
-            if getattr(resp, "stop_reason", "") != "pause_turn":
-                break
-            messages = messages + [{"role": "assistant", "content": resp.content}]
-            kwargs["messages"] = messages
-            resp = client().messages.create(**kwargs)
-        return _json(_text(resp))
+        resp = _create(kwargs)
+        if getattr(resp, "stop_reason", "") == "max_tokens":
+            # The answer was cut off: ask again with more room.
+            log.info("Answer hit max_tokens=%s, retrying with more room", kwargs["max_tokens"])
+            kwargs["max_tokens"] = min(kwargs["max_tokens"] * 2, 16000)
+            resp = _create(kwargs)
+        raw = _text(resp)
+        try:
+            return _json(raw)
+        except _Unreadable:
+            log.warning("Unreadable answer (stop_reason=%s), asking Claude to repair it. Start: %r",
+                        getattr(resp, "stop_reason", ""), raw[:300])
+        fix = client().messages.create(
+            model=config.CLAUDE_MODEL, max_tokens=min(max(max_tokens, 4000) * 2, 16000),
+            system="You convert text into strictly valid JSON. Reply with the JSON only.",
+            messages=[{"role": "user", "content": "Return this as valid JSON with the same content and structure. "
+                       "Escape quotes inside text values. If it is cut off, close it properly.\n\n" + raw}])
+        try:
+            return _json(_text(fix))
+        except _Unreadable:
+            log.error("Still unreadable after repair. Start: %r", _text(fix)[:300])
+            raise AIError("Claude's answer could not be read. Please try again.")
     except AIError:
         raise
     except anthropic.AuthenticationError as e:
         raise AIError("The Claude API key was rejected. Check it in the settings.") from e
+    except anthropic.NotFoundError as e:
+        raise AIError(f"The Claude model '{config.CLAUDE_MODEL}' was not found. Set CLAUDE_MODEL in the settings "
+                      "to a current model name.") from e
     except anthropic.APIStatusError as e:
         if "workspace" in str(e.message).lower():
             raise AIError("Your Claude API key needs a workspace. Either create a new key inside a workspace in the "
